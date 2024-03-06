@@ -1,0 +1,43 @@
+# Copyright (c) 2024, NVIDIA CORPORATION.  All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+cluster: slurm
+account: llmservice_nemo_robustness
+partition: batch_block1,batch_block3,batch_block4
+job_name_prefix: "llmservice_nemo_robustness-research"
+extra_sbatch_args:
+  - --exclusive
+  - --mem=0
+extra_sandbox_args:
+  - --overlap
+
+containers:
+  tensorrt_llm: /lustre/fsw/portfolios/llmservice/users/igitman/llm/images/nemo-skills-trtllm-0.1.0.sqsh
+  nemo: /lustre/fsw/portfolios/llmservice/users/igitman/llm/images/nemo-skills-sft-0.1.0.sqsh
+  sandbox: /lustre/fsw/portfolios/llmservice/users/igitman/llm/images/nemo-skills-sandbox-0.1.0.sqsh
+
+timeouts:
+  batch_block1,batch_block3,batch_block4: 04:00:00
+  interactive: 00:30:00
+
+# to get this info run: sinfo -o "%50N  %10c  %20m  %30G"
+
+max_cpus:
+  batch_block1,batch_block3,batch_block4: 248
+  interactive: 248
+
+max_memory:
+  batch_block1,batch_block3,batch_block4: 1878016
+  interactive: 1878016
+
