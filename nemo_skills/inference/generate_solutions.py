@@ -18,13 +18,14 @@ import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
+import os
 
 import hydra
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
 from nemo_skills.code_execution.sandbox import get_sandbox, sandbox_params
-from nemo_skills.inference.prompt.utils import Prompt, PromptConfig, datasets, prompt_types
+from nemo_skills.inference.prompt.utils import Prompt, PromptConfig, datasets, prompt_types, PromptConfigRob
 from nemo_skills.inference.server.model import get_model, server_params
 from nemo_skills.utils import get_help_message, setup_logging
 
@@ -52,7 +53,7 @@ class GenerateSolutionsConfig:
     sandbox: dict
     # Prompt configuration.
     # Available pre-configured prompts: {prompt_types}.
-    prompt: PromptConfig = field(default_factory=PromptConfig)
+    prompt: PromptConfigRob = field(default_factory=PromptConfigRob)
     inference: InferenceConfig = field(default_factory=InferenceConfig)  # LLM call parameters
 
     # Can specify one of the existing datasets.
@@ -70,11 +71,12 @@ class GenerateSolutionsConfig:
 
     def __post_init__(self):
         """Building data_file from dataset/split_name if not provided directly."""
-        if self.data_file is None and (self.dataset is None or self.split_name is None):
-            raise ValueError("Either `data_file` or `dataset` and `split_name` should be provided")
+        if self.data_file is None:
+            if (self.dataset is None or self.split_name is None):
+                raise ValueError("Either `data_file` or `dataset` and `split_name` should be provided")
             self.data_file = Path(__file__).parents[2] / "datasets" / self.dataset / f"{self.split_name}.jsonl"
         if not os.path.exists(self.data_file):
-                raise ValueError(f"Data file {args.data_file} does not exist")
+            raise ValueError(f"Data file {self.data_file} does not exist")
 
 
 cs = hydra.core.config_store.ConfigStore.instance()
@@ -87,7 +89,7 @@ def generate_solutions(cfg: GenerateSolutionsConfig):
 
     LOG.info("Config used: %s", cfg)
     sandbox = None #get_sandbox(**cfg.sandbox) if cfg.sandbox is not None else None
-    llm = get_model(**cfg.server, sandbox=sandbox)
+    llm = get_model(**cfg.server, sandbox=sandbox, handle_code_execution=False)
 
     # making sure output folder exists
     Path(cfg.output_file).absolute().parent.mkdir(parents=True, exist_ok=True)
@@ -111,7 +113,11 @@ def generate_solutions(cfg: GenerateSolutionsConfig):
 
     # additionally, skipping whatever is pre-filled, assuming offset didn't change
     data = data[starting_idx:]
-
+    # load prompts
+    sys.path.append(str(Path(cfg.data_file).absolute().parents[2]))
+    from prompts import TASK_ORIENTED_PROMPTS
+    task_query = TASK_ORIENTED_PROMPTS[cfg.dataset][int(cfg.prompt.prompt_id)]
+    import pdb; pdb.set_trace()
     # setting buffering=1 to force to dump the output after every line, so that we can see intermediate generations
     with open(cfg.output_file, "at" if cfg.skip_filled else "wt", encoding="utf-8", buffering=1) as fout:
         prompts = []
@@ -119,7 +125,8 @@ def generate_solutions(cfg: GenerateSolutionsConfig):
         for idx, data_point in tqdm(enumerate(data), initial=starting_idx, total=len(data) + starting_idx):
             if idx == cfg.max_samples:
                 break
-
+            data_point["query"] = task_query
+            print(str(Prompt(cfg.prompt, data_point)))
             prompts.append(Prompt(cfg.prompt, data_point))
             data_points.append(data_point)
 

@@ -42,7 +42,7 @@ datasets = [
 class FewShotExamples:
     template: str = MISSING
     examples_type: str = "gsm8k_text_with_code"
-    num_few_shots: int = 5
+    num_few_shots: int = 0 #5
 
 
 @dataclass
@@ -53,6 +53,16 @@ class PromptConfig:
     system: str = MISSING
     context_type: str = "empty"
     stop_phrases: List[str] = field(default_factory=list)
+
+@dataclass
+class PromptConfigRob(PromptConfig):
+    few_shot_examples: FewShotExamples = field(default_factory=FewShotExamples)
+    prompt_template: str = MISSING
+    user: str = MISSING
+    system: str = MISSING
+    context_type: str = "empty"
+    stop_phrases: List[str] = field(default_factory=list)
+    prompt_id: str = MISSING
 
 
 @dataclass
@@ -65,6 +75,7 @@ class Prompt:
 
     def __post_init__(self):
         """Initialize example_dicts/context_template if not provided."""
+        import pdb; pdb.set_trace()
         if self.example_dicts is None:
             self.example_dicts = examples_map.get(self.config.few_shot_examples.examples_type, [])[
                 : self.config.few_shot_examples.num_few_shots
@@ -87,6 +98,7 @@ class Prompt:
         filled_examples = [self.build_filled_example(example) for example in self.example_dicts]
         examples = "".join(filled_examples)
         context = self.build_context(self.input_dict)
+        import pdb; pdb.set_trace()
         user = self.config.user.format(examples=examples, context=context, **self.input_dict)
         return user
 
@@ -100,6 +112,7 @@ class Prompt:
 
     def __str__(self) -> str:
         """Returns the complete prompt string representation."""
+        import pdb; pdb.set_trace()
         prompt = self.config.prompt_template.format(
             system=self.config.system,
             user=self.build_examples(),
