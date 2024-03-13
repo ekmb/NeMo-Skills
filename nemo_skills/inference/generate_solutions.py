@@ -70,13 +70,11 @@ class GenerateSolutionsConfig:
 
     def __post_init__(self):
         """Building data_file from dataset/split_name if not provided directly."""
-        if self.data_file is not None:
-            if self.dataset is not None or self.split_name is not None:
-                raise ValueError("Either `data_file` or `dataset` and `split_name` should be provided, but not both")
-        else:
-            if self.dataset is None or self.split_name is None:
-                raise ValueError("Either `data_file` or `dataset` and `split_name` should be provided")
+        if self.data_file is None and (self.dataset is None or self.split_name is None):
+            raise ValueError("Either `data_file` or `dataset` and `split_name` should be provided")
             self.data_file = Path(__file__).parents[2] / "datasets" / self.dataset / f"{self.split_name}.jsonl"
+        if not os.path.exists(self.data_file):
+                raise ValueError(f"Data file {args.data_file} does not exist")
 
 
 cs = hydra.core.config_store.ConfigStore.instance()
@@ -88,7 +86,7 @@ def generate_solutions(cfg: GenerateSolutionsConfig):
     cfg = OmegaConf.to_object(cfg)
 
     LOG.info("Config used: %s", cfg)
-    sandbox = get_sandbox(**cfg.sandbox) if cfg.sandbox is not None else None
+    sandbox = None #get_sandbox(**cfg.sandbox) if cfg.sandbox is not None else None
     llm = get_model(**cfg.server, sandbox=sandbox)
 
     # making sure output folder exists
