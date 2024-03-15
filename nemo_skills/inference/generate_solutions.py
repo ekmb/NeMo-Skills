@@ -25,8 +25,9 @@ from tqdm import tqdm
 
 from nemo_skills.code_execution.sandbox import get_sandbox, sandbox_params
 from nemo_skills.inference.prompt.utils import Prompt, PromptConfig, datasets, prompt_types
-from nemo_skills.inference.server.model import get_model, server_params
-from nemo_skills.utils import get_help_message, setup_logging
+from nemo_skills.inference.server.model import ErrorRecoveryConfig, get_model, server_params
+from nemo_skills.utils import get_fields_docstring, get_help_message, setup_logging
+from nemo_skills.inference.compute_metrics import compute_metrics
 
 LOG = logging.getLogger(__file__)
 
@@ -46,7 +47,8 @@ class GenerateSolutionsConfig:
     """Top-level parameters for the script"""
 
     output_file: str  # Where to save the generations
-    # Inference server configuration {server_params}
+    # Inference server configuration {server_params} {error_recovery_params}
+    model_name: str  # for summary csv
     server: dict
     # Sandbox configuration {sandbox_params}
     sandbox: dict
@@ -82,6 +84,86 @@ class GenerateSolutionsConfig:
 cs = hydra.core.config_store.ConfigStore.instance()
 cs.store(name="base_generation_config", node=GenerateSolutionsConfig)
 
+import os
+from tqdm import tqdm
+import pandas as pd
+import glob
+
+SEPARATORS = ["<extra_id_1>", "\n"]
+
+# source: https://github.com/microsoft/promptbench/blob/main/promptbench/config.py
+LABEL_TO_ID = {
+    "mmlu": ["A", "B", "C", "D"],
+    "sst2": ["negative", "positive"],
+    "mnli": ["entailment", "neutral", "contradiction"],
+    "mnli_mismatched": ["entailment", "neutral", "contradiction"],
+    "mnli_matched": ["entailment", "neutral", "contradiction"],
+    "qqp": ["equivalent", "not_equivalent"],
+    "qnli": ["entailment", "not_entailment"],
+    "rte": ["entailment", "not_entailment"],
+    "cola": ["unacceptable", "acceptable"],
+    "mrpc": ["equivalent", "not_equivalent"],
+    "wnli": ["entailment", "not_entailment"],
+    "retrieve_kv": ["negative", "positive"],
+    "boolq": ["true", "false"],
+}
+
+def postprocess_pred(predict_str: str, task_name: str):
+    predict_str = predict_str.strip()
+
+    # Truncate prediction based on Instruction/Dialog template
+    for separator in SEPARATORS:
+        if separator in predict_str:
+            predict_str = predict_str.split(separator)[0].strip()
+
+    predict_str = predict_str.lower()
+
+    delimiters = [" ", ",", "."]
+    quotes = ["'", '"', "'", "`", "`"]
+    # if LABEL_TO_ID[task_name] doesn't contain any quotes, remove them from predict_str
+    if not any([quote in "".join(LABEL_TO_ID[task_name]) for quote in quotes]):
+        for quote in quotes:
+            predict_str = predict_str.replace(quote, "")
+
+    # remove repeated labels while making sure only the label is repeated
+    for label in LABEL_TO_ID[task_name]:
+        label_count = predict_str.count(label)
+        if label_count > 1:
+            for delimiter in delimiters:
+                if delimiter in predict_str:
+                    repeated_label = delimiter.join([label] * label_count)
+                    if repeated_label == predict_str:
+                        predict_str = predict_str.split(delimiter)[0]
+                        break
+
+    return predict_str
+
+def add_version_to_file(file_name):
+    file_folder = os.path.dirname(file_name)
+    base_name = os.path.basename(file_name).split('.jsonl')[0]
+    pred_files = os.listdir(file_folder)
+    pred_files = [f for f in pred_files if f.endswith("_preds.jsonl")]
+    pred_files = [f for f in pred_files if base_name in f]
+    version = [int(f.split('_preds.jsonl')[0].split('__v')[-1]) for f in pred_files if '__v' in f]
+    if len(version) > 0:
+        version = max(version) + 1
+    else:
+        version = 0
+
+    file_name = file_name.replace(".jsonl", f"__v{version}_preds.jsonl")
+    return file_name
+
+
+def collect_results(save_dir):
+    summary_csvs = glob.glob(f"{save_dir}/**/summary*.csv", recursive=True)
+    results = []
+    for summary_file in summary_csvs:
+        df = pd.read_csv(summary_file)
+        results.append(df)
+    df = pd.concat(results)
+    df.to_csv(os.path.join(save_dir, "all_summary.csv"), index=False)
+    print(f"Saved results to {os.path.join(save_dir, 'all_summary.csv')}")
+
 
 @hydra.main(version_base=None, config_name='generation_config', config_path='.')
 def generate_solutions(cfg: GenerateSolutionsConfig):
@@ -91,57 +173,37 @@ def generate_solutions(cfg: GenerateSolutionsConfig):
     sandbox = get_sandbox(**cfg.sandbox) if cfg.sandbox is not None else None
     llm = get_model(**cfg.server, sandbox=sandbox)
 
-    # making sure output folder exists
-    Path(cfg.output_file).absolute().parent.mkdir(parents=True, exist_ok=True)
+    data_file = list(open(cfg.output_file))
+    data_file = [json.loads(line) for line in data_file]
+    batch = []
+    for i in tqdm(range(0, len(data_file), cfg.batch_size)):
+        batch = data_file[i:min(i+cfg.batch_size, len(data_file))]
+        prompts = [i['input'] for i in batch]
+        outputs = llm(stop_phrases=list(cfg.prompt.stop_phrases), prompts=prompts, **asdict(cfg.inference))
+        for k, o_k in enumerate(outputs):
+            data_file[i+k]['pred'] = postprocess_pred(o_k, 'qqp')
 
-    # we currently assume the dataset is small enough to be loaded into memory
-    data = []
-    with open(cfg.data_file, "rt", encoding="utf-8") as fin:
-        for line in fin:
-            data.append(json.loads(line))
+    save_dir = os.path.join(os.path.dirname(cfg.output_file), 'preds')
+    os.makedirs(save_dir, exist_ok=True)
+    # make a folder with the name of the data file in save dir to keep predictions
+    # useful for multiple prediction files
+    output_dir = os.path.join(save_dir, os.path.basename(cfg.output_file).replace('.jsonl', ''))
+    os.makedirs(output_dir, exist_ok=True)
+    output_file = os.path.join(output_dir, os.path.basename(cfg.output_file))
+    output_file = add_version_to_file(output_file)
+    with open(output_file, "w") as f_out:
+        for i in data_file:
+            f_out.write(json.dumps(i) + "\n")
 
-    # skipping based on the offset first
-    data = data[cfg.offset :]
+    prefix = os.path.basename(output_file).replace(".jsonl", "")
+    compute_metrics(os.path.dirname(output_file), 'qqp', prefix, 0, eval_metadata={'model_name': cfg.model_name})
+    collect_results(save_dir)
 
-    starting_idx = 0
-    if cfg.skip_filled:
-        try:
-            with open(cfg.output_file, "rt", encoding="utf-8") as fin:
-                starting_idx = len(fin.readlines())
-        except FileNotFoundError:
-            LOG.warning(f"File `{cfg.output_file}` not found, starting from scratch")
-
-    # additionally, skipping whatever is pre-filled, assuming offset didn't change
-    data = data[starting_idx:]
-
-    # setting buffering=1 to force to dump the output after every line, so that we can see intermediate generations
-    with open(cfg.output_file, "at" if cfg.skip_filled else "wt", encoding="utf-8", buffering=1) as fout:
-        prompts = []
-        data_points = []
-        for idx, data_point in tqdm(enumerate(data), initial=starting_idx, total=len(data) + starting_idx):
-            if idx == cfg.max_samples:
-                break
-
-            prompts.append(Prompt(cfg.prompt, data_point))
-            data_points.append(data_point)
-
-            if len(prompts) == cfg.batch_size:
-                # batch-computing the outputs
-                outputs = llm(stop_phrases=list(cfg.prompt.stop_phrases), prompts=prompts, **asdict(cfg.inference))
-                for output, original_data_point in zip(outputs, data_points):
-                    # to make it easier to follow up with evaluation and limit accidental errors, we are adding
-                    # all of the ground-truth data to the output file alongside the generated solutions
-                    output.update(original_data_point)
-                    fout.write(json.dumps(output) + "\n")
-                prompts = []
-                data_points = []
-
-        # collecting the final batch
-        if len(prompts) > 0:
-            outputs = llm(stop_phrases=list(cfg.prompt.stop_phrases), prompts=prompts, **asdict(cfg.inference))
-            for output, original_data_point in zip(outputs, data_points):
-                output.update(original_data_point)
-                fout.write(json.dumps(output) + "\n")
+error_recovery_params = '\n' + get_fields_docstring(
+    ErrorRecoveryConfig,
+    prefix='server.error_recovery.',
+    level=2,
+)
 
 
 HELP_MESSAGE = get_help_message(
@@ -150,6 +212,7 @@ HELP_MESSAGE = get_help_message(
     prompt_types=prompt_types,
     server_params=server_params(),
     sandbox_params=sandbox_params(),
+    error_recovery_params=error_recovery_params,
 )
 
 
