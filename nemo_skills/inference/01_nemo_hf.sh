@@ -4,7 +4,7 @@
 #SBATCH --exclusive
 #SBATCH --overcommit
 
-MOUNTS="${NEMO_SKILLS_CODE}:/code,${TRT_PATH}:/model"
+MOUNTS="${NEMO_SKILLS_CODE}:/code,${TRT_PATH}:/model,/lustre:/lustre"
 
 set -x
 read -r -d '' nemo_hf <<EOF
