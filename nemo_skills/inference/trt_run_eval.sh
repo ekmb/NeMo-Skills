@@ -10,26 +10,32 @@ function generate_args() {
     echo "${args_str:1}"
 }
 
+# =============================== UPDATE =================================================
 ACCOUNT="llmservice_nemo_robustness"
-TIME="00:20:00"
+TIME="00:20:00" # should be enough for all 
 PARTITION="batch_block1,batch_block3,batch_block4"
 NEMO_SKILLS_CODE="${HOME_DIR}/code/NeMo-Skills"
-MODEL_PATH="${HOME_DIR}/checkpoints/Mistral_7B_3turns_baseline_backup/megatron_gpt_sft_aligned-averaged.nemo"
-TRT_PATH="${HOME_DIR}/checkpoints/Mistral_7B_3turns_baseline_backup"
+
+HF_MODEL_NAME="mistralai/Mistral-7B-v0.1"  # Original model's HF name
+
+MODEL_NAME="Mistral_7B_3turns_emb_noise_1e-4" # for summary csv
+MODEL_PATH="/lustre/fsw/portfolios/llmservice/users/mnovikov/results/Mistral_7B_3turns_emb_noise_1e-4/checkpoints/megatron_gpt_sft_aligned-averaged.nemo"
+TRT_PATH="${PROJECT_DIR}/trt_models/${MODEL_NAME}"
 LOGS_DIR="${HOME_DIR}/results/eval/logs"
 mkdir -p ${LOGS_DIR}
-NEMO_HF=0
-HF_TRT=0
+NEMO_HF=1
+HF_TRT=1
 RUN_EVAL=1
 
 # Conversion Params
 PP=1
-TP=4
-MAX_INPUT_LEN=2048
-MAX_OUTPUT_LEN=40
+TP=8
+MAX_INPUT_LEN=4096
+MAX_OUTPUT_LEN=128
 MAX_BATCH_SIZE=128
-HF_MODEL_NAME="mistralai/Mistral-7B-v0.1"  # Original model's HF name
 CONVERSION_ARGS=$(generate_args TRT_PATH NEMO_SKILLS_CODE PP TP LOGS_DIR MAX_INPUT_LEN MAX_OUTPUT_LEN MAX_BATCH_SIZE HF_MODEL_NAME )
+
+# ========================================================================================
 
 hf_trt_dependency=""
 if [ "$NEMO_HF" -eq 1 ]; then
@@ -62,20 +68,17 @@ if [ "$HF_TRT" -eq 1 ]; then
 fi
 
 # Evaluation Params
-DATA_DIR="${HOME_DIR}/data/"
-DATA_FILES=("/data/qqp_1k/clean_quot/validation_0.jsonl" )
-MODEL_NAME='Mistral_7B_3turns_baseline_backup' # for summary csv
-TASK='qqp'
+DATA_FILES=("{$PROJECT_DIR}/datasets/glue_prompt/mnli/clean/validation_0.jsonl" )
+TASK='mnli'
 TEMPERATURE=0  # Temperature of 0 means greedy decoding
 TOP_K=0
 TOP_P=0.95
 RANDOM_SEED=0
 TOKENS_TO_GENERATE=10
 REPETITION_PENALTY=1.0
-BATCH_SIZE=100
-
-MOUNTS="${NEMO_SKILLS_CODE}:/code,${MODEL_PATH}:/model,${DATA_DIR}:/data"
-EVAL_ARGS=$(generate_args MOUNTS DATA_DIR DATA_FILES  MODEL_NAME TEMPERATURE TOP_K TOP_P RANDOM_SEED TOKENS_TO_GENERATE REPETITION_PENALTY BATCH_SIZE TRT_PATH NEMO_SKILLS_CODE PP TP LOGS_DIR )
+BATCH_SIZE=${MAX_BATCH_SIZE}
+MOUNTS="${NEMO_SKILLS_CODE}:/code,${MODEL_PATH}:/model"
+EVAL_ARGS=$(generate_args MOUNTS DATA_FILES MODEL_NAME TEMPERATURE TOP_K TOP_P RANDOM_SEED TOKENS_TO_GENERATE REPETITION_PENALTY BATCH_SIZE TRT_PATH NEMO_SKILLS_CODE PP TP LOGS_DIR )
 
 sbatch $eval_dependency \
     --account=${ACCOUNT} \

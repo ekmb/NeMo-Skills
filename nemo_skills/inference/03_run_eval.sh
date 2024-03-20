@@ -4,7 +4,7 @@
 #SBATCH --exclusive
 #SBATCH --overcommit
 
-MOUNTS="${NEMO_SKILLS_CODE}:/code,${TRT_PATH}:/model,${DATA_DIR}:/data"
+MOUNTS="${NEMO_SKILLS_CODE}:/code,${TRT_PATH}:/model"
 
 set -x
 
