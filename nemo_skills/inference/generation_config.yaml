@@ -3,8 +3,6 @@ defaults:
   # - prompt: code_base
   - _self_
 
-output_file: ???
-
 server:
   server_type: tensorrt_llm
   host: 127.0.0.1

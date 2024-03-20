@@ -200,7 +200,7 @@ def write_evaluation(results: dict, pred_file: str):
         results_csv = pd.read_csv(output_file)
         df = pd.concat([results_csv, df], axis=0)
         df = df.drop_duplicates(subset=['Task', 'Score', 'Nulls', 'batch_size', 'temperature', 'top_k', 'top_p',
-                                    'tokens_to_generate', 'greedy', 'template', 'model_name'])
+                                    'tokens_to_generate', 'repetition_penalty', 'random_seed', 'model_name'])
     df.to_csv(output_file, index=False)
     print("\n=============================================\n")
     print(df)

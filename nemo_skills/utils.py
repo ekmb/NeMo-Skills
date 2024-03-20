@@ -144,7 +144,7 @@ def extract_comments_above_fields(dataclass_obj, prefix: str = '', level: int = 
     return comments
 
 
-def get_fields_docstring(dataclass_obj):
+def get_fields_docstring(dataclass_obj, **kwargs):
     commented_fields = extract_comments_above_fields(dataclass_obj)
     docstring = [content for content in commented_fields.values()]
     return '\n'.join(docstring)

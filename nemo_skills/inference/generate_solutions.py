@@ -12,6 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+from tqdm import tqdm
+import pandas as pd
+import glob
 import json
 import logging
 import sys
@@ -45,49 +49,44 @@ class InferenceConfig:
 @dataclass
 class GenerateSolutionsConfig:
     """Top-level parameters for the script"""
-
-    output_file: str  # Where to save the generations
-    # Inference server configuration {server_params} {error_recovery_params}
+    # output_file: Optional[str] = None # Where to save the generations
     model_name: str  # for summary csv
+    # Inference server configuration {server_params} {error_recovery_params}
     server: dict
     # Sandbox configuration {sandbox_params}
     sandbox: dict
     # Prompt configuration.
     # Available pre-configured prompts: {prompt_types}.
-    prompt: PromptConfig = field(default_factory=PromptConfig)
+    # prompt: PromptConfig = field(default_factory=PromptConfig)
+    save_dir: str = ''
+    task: str = 'qqp'
     inference: InferenceConfig = field(default_factory=InferenceConfig)  # LLM call parameters
 
     # Can specify one of the existing datasets.
     # Choices: {datasets}.
-    dataset: Optional[str] = None
-    split_name: Optional[str] = None  # Can be train, validation, test or train_full (train + validation)
+    # dataset: Optional[str] = None
+    # split_name: Optional[str] = None  # Can be train, validation, test or train_full (train + validation)
     data_file: Optional[str] = None  # Can directly specify a data file, if using a custom dataset
 
     batch_size: int = 16
-    max_samples: int = -1  # If > 0, will stop after generating this many samples. Useful for debugging
-    skip_filled: bool = False  # If True, will skip the generations that are already in the output file
+    # max_samples: int = -1  # If > 0, will stop after generating this many samples. Useful for debugging
+    # skip_filled: bool = False  # If True, will skip the generations that are already in the output file
     # if > 0, will skip this many samples from the beginning of the data file.
     # Useful if need to run multiple slurm jobs on the same data file
-    offset: int = 0
+    # offset: int = 0
 
-    def __post_init__(self):
-        """Building data_file from dataset/split_name if not provided directly."""
-        if self.data_file is not None:
-            if self.dataset is not None or self.split_name is not None:
-                raise ValueError("Either `data_file` or `dataset` and `split_name` should be provided, but not both")
-        else:
-            if self.dataset is None or self.split_name is None:
-                raise ValueError("Either `data_file` or `dataset` and `split_name` should be provided")
-            self.data_file = Path(__file__).parents[2] / "datasets" / self.dataset / f"{self.split_name}.jsonl"
+    # def __post_init__(self):
+    #     """Building data_file from dataset/split_name if not provided directly."""
+    #     if self.data_file is not None:
+    #         if self.dataset is not None or self.split_name is not None:
+    #             raise ValueError("Either `data_fileRANDOM_SEEDname is None:
+    #             raise ValueError("Either `data_file` or `dataset` and `split_name` should be provided")
+    #         self.data_file = Path(__file__).parents[2] / "datasets" / self.dataset / f"{self.split_name}.jsonl"
 
 
 cs = hydra.core.config_store.ConfigStore.instance()
 cs.store(name="base_generation_config", node=GenerateSolutionsConfig)
 
-import os
-from tqdm import tqdm
-import pandas as pd
-import glob
 
 SEPARATORS = ["<extra_id_1>", "\n"]
 
@@ -138,6 +137,7 @@ def postprocess_pred(predict_str: str, task_name: str):
 
     return predict_str
 
+
 def add_version_to_file(file_name):
     file_folder = os.path.dirname(file_name)
     base_name = os.path.basename(file_name).split('.jsonl')[0]
@@ -173,30 +173,35 @@ def generate_solutions(cfg: GenerateSolutionsConfig):
     sandbox = get_sandbox(**cfg.sandbox) if cfg.sandbox is not None else None
     llm = get_model(**cfg.server, sandbox=sandbox)
 
-    data_file = list(open(cfg.output_file))
+    data_file = list(open(cfg.data_file))
     data_file = [json.loads(line) for line in data_file]
     batch = []
     for i in tqdm(range(0, len(data_file), cfg.batch_size)):
         batch = data_file[i:min(i+cfg.batch_size, len(data_file))]
         prompts = [i['input'] for i in batch]
-        outputs = llm(stop_phrases=list(cfg.prompt.stop_phrases), prompts=prompts, **asdict(cfg.inference))
+        outputs = llm(stop_phrases=SEPARATORS, prompts=prompts, **asdict(cfg.inference))
         for k, o_k in enumerate(outputs):
             data_file[i+k]['pred'] = postprocess_pred(o_k, 'qqp')
 
-    save_dir = os.path.join(os.path.dirname(cfg.output_file), 'preds')
+    if cfg.save_dir:
+        save_dir = cfg.save_dir
+    else:
+        save_dir = os.path.join(os.path.dirname(cfg.data_file), 'preds')
     os.makedirs(save_dir, exist_ok=True)
     # make a folder with the name of the data file in save dir to keep predictions
     # useful for multiple prediction files
-    output_dir = os.path.join(save_dir, os.path.basename(cfg.output_file).replace('.jsonl', ''))
+    output_dir = os.path.join(save_dir, os.path.basename(cfg.data_file).replace('.jsonl', ''))
     os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, os.path.basename(cfg.output_file))
+    output_file = os.path.join(output_dir, os.path.basename(cfg.data_file))
     output_file = add_version_to_file(output_file)
     with open(output_file, "w") as f_out:
         for i in data_file:
             f_out.write(json.dumps(i) + "\n")
 
     prefix = os.path.basename(output_file).replace(".jsonl", "")
-    compute_metrics(os.path.dirname(output_file), 'qqp', prefix, 0, eval_metadata={'model_name': cfg.model_name})
+    subset=['Score', 'Nulls', 'template']
+    eval_matadata = {'Task': cfg.task, 'batch_size': cfg.batch_size, 'model_name': cfg.model_name, **asdict(cfg.inference)}
+    compute_metrics(os.path.dirname(output_file), 'qqp', prefix, 0, eval_metadata=eval_matadata)
     collect_results(save_dir)
 
 error_recovery_params = '\n' + get_fields_docstring(
