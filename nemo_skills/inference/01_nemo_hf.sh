@@ -21,7 +21,7 @@ read -r -d '' nemo_hf <<EOF
 EOF
 
 srun   --mpi=pmix \
-       --container-image=/lustre/fsw/portfolios/llmservice/users/igitman/llm/images/nemo-skills-sft-0.2.0.sqsh \
+       --container-image=${PROJECT_DIR}/containers/nemo-skills-sft-0.2.0.sqsh \
        --container-mounts=${MOUNTS} \
        --nodes ${PP} \
         -o "${LOGS_DIR}/nemo_hf-slurm-%j-%n.out" \

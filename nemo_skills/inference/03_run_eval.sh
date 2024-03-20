@@ -42,7 +42,7 @@ read -r -d '' up_eval <<EOF
 EOF
 
 srun   --mpi=pmix \
-       --container-image=/lustre/fsw/portfolios/llmservice/users/igitman/llm/images/nemo-skills-trtllm-0.2.0.sqsh \
+       --container-image=${PROJECT_DIR}/containers/nemo-skills-trtllm-0.2.0.sqsh \
        --container-mounts=${MOUNTS} \
        --nodes ${PP} \
        --gpus-per-node ${TP} \
