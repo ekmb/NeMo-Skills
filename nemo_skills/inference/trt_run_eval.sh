@@ -12,7 +12,7 @@ function generate_args() {
 
 # =============================== UPDATE =================================================
 ACCOUNT="llmservice_nemo_robustness"
-TIME="00:20:00" # should be enough for all 
+TIME="00:20:00" # should be enough for all
 PARTITION="batch_block1,batch_block3,batch_block4"
 NEMO_SKILLS_CODE="${HOME_DIR}/code/NeMo-Skills"
 
@@ -33,7 +33,7 @@ TP=8
 MAX_INPUT_LEN=4096
 MAX_OUTPUT_LEN=128
 MAX_BATCH_SIZE=128
-CONVERSION_ARGS=$(generate_args TRT_PATH PROJECT_DIR NEMO_SKILLS_CODE PP TP LOGS_DIR MAX_INPUT_LEN MAX_OUTPUT_LEN MAX_BATCH_SIZE HF_MODEL_NAME )
+CONVERSION_ARGS=$(generate_args TRT_PATH MODEL_PATH PROJECT_DIR NEMO_SKILLS_CODE PP TP LOGS_DIR MAX_INPUT_LEN MAX_OUTPUT_LEN MAX_BATCH_SIZE HF_MODEL_NAME )
 
 # ========================================================================================
 

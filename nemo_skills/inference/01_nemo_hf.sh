@@ -13,7 +13,7 @@ read -r -d '' nemo_hf <<EOF
     && export PYTHONPATH=\$PYTHONPATH:/code \
     && echo "Converting .nemo to HF" \
     && python nemo_skills/conversion/nemo_to_hf.py \
-        --in-path /model/megatron_gpt_sft_aligned-averaged.nemo \
+        --in-path ${MODEL_PATH} \
         --out-path /model/model_hf \
         --hf-model-name ${HF_MODEL_NAME} \
         --precision bf16 \
