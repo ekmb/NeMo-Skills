@@ -12,7 +12,8 @@ function generate_args() {
 
 # =============================== UPDATE =================================================
 ACCOUNT="llmservice_nemo_robustness"
-TIME="00:30:00" # should be enough for all
+CONVERSION_TIMA="00:15:00"
+EVAL_TIME="00:30:00" 
 PARTITION="batch_block1,batch_block3,batch_block4"
 NEMO_SKILLS_CODE="${HOME_DIR}/code/NeMo-Skills"
 
@@ -41,7 +42,7 @@ if [ "$NEMO_HF" -eq 1 ]; then
     nemo_hf_id=$(sbatch \
         --account=${ACCOUNT} \
         --export=${CONVERSION_ARGS} \
-        --time=${TIME} \
+        --time=${CONVERSION_TIME} \
         --job-name=${ACCOUNT}-nemo_hf_conv \
         --gres=gpu:${TP} \
         --nodes=${PP} \
@@ -56,7 +57,7 @@ if [ "$HF_TRT" -eq 1 ]; then
     hf_trt_id=$(sbatch $hf_trt_dependency \
         --account=${ACCOUNT} \
         --export=${CONVERSION_ARGS} \
-        --time=${TIME} \
+        --time=${CONVERSION_TIME} \
         --job-name=${ACCOUNT}-hf_trt_conv \
         --gres=gpu:${TP} \
         --nodes=${PP} \
@@ -83,7 +84,7 @@ EVAL_ARGS=$(generate_args MOUNTS PROJECT_DIR SAVE_DIR DATA_DIR DATA_FILES MODEL_
 sbatch $eval_dependency \
     --account=${ACCOUNT} \
     --export=${EVAL_ARGS} \
-    --time=${TIME} \
+    --time=${EVAL_TIME} \
     --job-name=${ACCOUNT}-eval \
     -o=${LOGS_DIR}/out.log \
     --gres=gpu:${TP} \
