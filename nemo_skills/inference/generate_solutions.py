@@ -54,7 +54,7 @@ class GenerateSolutionsConfig:
     # Inference server configuration {server_params} {error_recovery_params}
     server: dict
     # Sandbox configuration {sandbox_params}
-    sandbox: dict
+    sandbox: Optional[dict] = None
     # Prompt configuration.
     # Available pre-configured prompts: {prompt_types}.
     # prompt: PromptConfig = field(default_factory=PromptConfig)
@@ -66,8 +66,8 @@ class GenerateSolutionsConfig:
     # Choices: {datasets}.
     # dataset: Optional[str] = None
     # split_name: Optional[str] = None  # Can be train, validation, test or train_full (train + validation)
-    data_file: Optional[str] = None  # Can directly specify a data file, if using a custom dataset
-
+    data_file: Optional[list[str]] = None  # Can directly specify a data file, if using a custom dataset
+    data_dir: Optional[str] = None
     batch_size: int = 16
     # max_samples: int = -1  # If > 0, will stop after generating this many samples. Useful for debugging
     # skip_filled: bool = False  # If True, will skip the generations that are already in the output file
@@ -170,39 +170,51 @@ def generate_solutions(cfg: GenerateSolutionsConfig):
     cfg = OmegaConf.to_object(cfg)
 
     LOG.info("Config used: %s", cfg)
-    sandbox = get_sandbox(**cfg.sandbox) if cfg.sandbox is not None else None
-    llm = get_model(**cfg.server, sandbox=sandbox)
+    # sandbox = get_sandbox(**cfg.sandbox) if cfg.sandbox is not None else None
+    # llm = get_model(**cfg.server, sandbox=None)
 
-    data_file = list(open(cfg.data_file))
-    data_file = [json.loads(line) for line in data_file]
-    batch = []
-    for i in tqdm(range(0, len(data_file), cfg.batch_size)):
-        batch = data_file[i:min(i+cfg.batch_size, len(data_file))]
-        prompts = [i['input'] for i in batch]
-        outputs = llm(stop_phrases=SEPARATORS, prompts=prompts, **asdict(cfg.inference))
-        for k, o_k in enumerate(outputs):
-            data_file[i+k]['pred'] = postprocess_pred(o_k, 'qqp')
-
-    if cfg.save_dir:
-        save_dir = cfg.save_dir
+    if cfg.data_dir:
+        data_files = glob.glob(f"{cfg.data_dir}/**/*.jsonl", recursive=True)
+        data_files = [df for df in data_files if not df.endswith('_preds.jsonl')]
+    elif cfg.data_file:
+        data_files = cfg.data_file
     else:
-        save_dir = os.path.join(os.path.dirname(cfg.data_file), 'preds')
-    os.makedirs(save_dir, exist_ok=True)
-    # make a folder with the name of the data file in save dir to keep predictions
-    # useful for multiple prediction files
-    output_dir = os.path.join(save_dir, os.path.basename(cfg.data_file).replace('.jsonl', ''))
-    os.makedirs(output_dir, exist_ok=True)
-    output_file = os.path.join(output_dir, os.path.basename(cfg.data_file))
-    output_file = add_version_to_file(output_file)
-    with open(output_file, "w") as f_out:
-        for i in data_file:
-            f_out.write(json.dumps(i) + "\n")
+        raise ValueError('Either data_dir or data_files should be specified')
 
-    prefix = os.path.basename(output_file).replace(".jsonl", "")
-    subset=['Score', 'Nulls', 'template']
-    eval_matadata = {'Task': cfg.task, 'batch_size': cfg.batch_size, 'model_name': cfg.model_name, **asdict(cfg.inference)}
-    compute_metrics(os.path.dirname(output_file), 'qqp', prefix, 0, eval_metadata=eval_matadata)
-    collect_results(save_dir)
+    for data_file_path in data_files:
+        data_file = list(open(data_file_path))
+        data_file = [json.loads(line) for line in data_file]
+        batch = []
+        for i in tqdm(range(0, len(data_file), cfg.batch_size)):
+            batch = data_file[i:min(i+cfg.batch_size, len(data_file))]
+            prompts = [i['input'] for i in batch]
+            outputs = llm(stop_phrases=SEPARATORS, prompts=prompts, **asdict(cfg.inference))
+            for k, o_k in enumerate(outputs):
+                data_file[i+k]['pred'] = postprocess_pred(o_k, 'qqp')
+
+        if cfg.save_dir:
+            if cfg.data_dir:
+                save_dir = os.path.dirname(data_file_path.replace(cfg.data_dir, cfg.save_dir, 1)) # Original
+            else:
+                save_dir = cfg.save_dir
+        else:
+            save_dir = os.path.join(os.path.dirname(data_file_path), 'preds')
+        # os.makedirs(save_dir, exist_ok=True)
+        # make a folder with the name of the data file in save dir to keep predictions
+        # useful for multiple prediction files
+        pred_folder = os.path.join(save_dir, os.path.basename(data_file_path).replace('.jsonl', ''))
+        os.makedirs(pred_folder, exist_ok=True)
+        pred_save_file = os.path.join(pred_folder, os.path.basename(data_file_path))
+        pred_save_file = add_version_to_file(pred_save_file)
+        with open(pred_save_file, "w") as f_out:
+            for i in data_file:
+                f_out.write(json.dumps(i) + "\n")
+
+        prefix = os.path.basename(pred_save_file).replace(".jsonl", "")
+        eval_matadata = {'Task': cfg.task, 'batch_size': cfg.batch_size, 'model_name': cfg.model_name, **asdict(cfg.inference)}
+        compute_metrics(os.path.dirname(pred_save_file), 'qqp', prefix, 0, eval_metadata=eval_matadata)
+        collect_results(save_dir)
+
 
 error_recovery_params = '\n' + get_fields_docstring(
     ErrorRecoveryConfig,

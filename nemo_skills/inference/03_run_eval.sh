@@ -25,6 +25,7 @@ read -r -d '' up_eval <<EOF
     do
        python nemo_skills/inference/generate_solutions.py \
        data_file="\${DATA_FILE}" \
+       data_dir="\${DATA_DIR}" \
        server.host=127.0.0.1 \
        model_name=${MODEL_NAME} \
        batch_size=${BATCH_SIZE} \
