@@ -14,18 +14,16 @@ read -r -d '' up_eval <<EOF
     && export PYTHONPATH=\$PYTHONPATH:/code \
     && echo "Starting server" \
     && chmod -R 777 /model \
-    && touch /model/server_logs.txt \
     && mpirun -n ${TP} --allow-run-as-root --oversubscribe python nemo_skills/inference/server/serve_trt.py --model_path /model/model_trt/ > /model/server_logs.txt \
     & echo "Waiting for the server to start" \
     && tail -n0 -f /model/server_logs.txt | sed '/Running on all addresses/ q' \
     && echo "Server Started" \
     && cd /code \
     && export PYTHONPATH=\$PYTHONPATH:/code \
-    && for DATA_FILE in "${DATA_FILES[@]}"
-    do
-       python nemo_skills/inference/generate_solutions.py \
-       data_file="\${DATA_FILE}" \
+    && python nemo_skills/inference/generate_solutions.py \
+       data_file=\["\${DATA_FILE}"\] \
        data_dir="\${DATA_DIR}" \
+       save_dir="\${SAVE_DIR}" \
        server.host=127.0.0.1 \
        model_name=${MODEL_NAME} \
        batch_size=${BATCH_SIZE} \
@@ -35,10 +33,9 @@ read -r -d '' up_eval <<EOF
        inference.top_p=${TOP_P} \
        inference.random_seed=${RANDOM_SEED} \
        inference.tokens_to_generate=${TOKENS_TO_GENERATE} \
-       inference.repetition_penalty=${REPETITION_PENALTY}
-    done \
+       inference.repetition_penalty=${REPETITION_PENALTY} \
     && echo "Killing server" \
-    && kill %1 \
+    && kill %1
     && rm /model/server_logs.txt;
 EOF
 

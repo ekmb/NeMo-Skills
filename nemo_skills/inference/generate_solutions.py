@@ -170,8 +170,8 @@ def generate_solutions(cfg: GenerateSolutionsConfig):
     cfg = OmegaConf.to_object(cfg)
 
     LOG.info("Config used: %s", cfg)
-    # sandbox = get_sandbox(**cfg.sandbox) if cfg.sandbox is not None else None
-    # llm = get_model(**cfg.server, sandbox=None)
+    sandbox = get_sandbox(**cfg.sandbox) if cfg.sandbox is not None else None
+    llm = get_model(**cfg.server, sandbox=sandbox)
 
     if cfg.data_dir:
         data_files = glob.glob(f"{cfg.data_dir}/**/*.jsonl", recursive=True)
@@ -182,6 +182,7 @@ def generate_solutions(cfg: GenerateSolutionsConfig):
         raise ValueError('Either data_dir or data_files should be specified')
 
     for data_file_path in data_files:
+        task = os.path.basename(os.path.dirname(os.path.dirname(data_file_path)))
         data_file = list(open(data_file_path))
         data_file = [json.loads(line) for line in data_file]
         batch = []
@@ -190,16 +191,16 @@ def generate_solutions(cfg: GenerateSolutionsConfig):
             prompts = [i['input'] for i in batch]
             outputs = llm(stop_phrases=SEPARATORS, prompts=prompts, **asdict(cfg.inference))
             for k, o_k in enumerate(outputs):
-                data_file[i+k]['pred'] = postprocess_pred(o_k, 'qqp')
+                data_file[i+k]['pred'] = postprocess_pred(o_k, task)
 
         if cfg.save_dir:
             if cfg.data_dir:
-                save_dir = os.path.dirname(data_file_path.replace(cfg.data_dir, cfg.save_dir, 1)) # Original
+                # prediction will be saved in a folder with original folder structure
+                save_dir = os.path.dirname(data_file_path.replace(cfg.data_dir, cfg.save_dir, 1))
             else:
                 save_dir = cfg.save_dir
         else:
             save_dir = os.path.join(os.path.dirname(data_file_path), 'preds')
-        # os.makedirs(save_dir, exist_ok=True)
         # make a folder with the name of the data file in save dir to keep predictions
         # useful for multiple prediction files
         pred_folder = os.path.join(save_dir, os.path.basename(data_file_path).replace('.jsonl', ''))
@@ -209,10 +210,9 @@ def generate_solutions(cfg: GenerateSolutionsConfig):
         with open(pred_save_file, "w") as f_out:
             for i in data_file:
                 f_out.write(json.dumps(i) + "\n")
-
         prefix = os.path.basename(pred_save_file).replace(".jsonl", "")
-        eval_matadata = {'Task': cfg.task, 'batch_size': cfg.batch_size, 'model_name': cfg.model_name, **asdict(cfg.inference)}
-        compute_metrics(os.path.dirname(pred_save_file), 'qqp', prefix, 0, eval_metadata=eval_matadata)
+        eval_matadata = {'Task': task, 'batch_size': cfg.batch_size, 'model_name': cfg.model_name, **asdict(cfg.inference)}
+        compute_metrics(os.path.dirname(pred_save_file), task, prefix, 0, eval_metadata=eval_matadata)
         collect_results(save_dir)
 
 

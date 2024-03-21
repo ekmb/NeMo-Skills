@@ -20,12 +20,12 @@ HF_MODEL_NAME="mistralai/Mistral-7B-v0.1"  # Original model's HF name
 MODEL_NAME="Mistral_7B_3turns_emb_noise_1e-4" # for summary csv
 MODEL_PATH="/lustre/fsw/portfolios/llmservice/users/mnovikov/results/Mistral_7B_3turns_emb_noise_1e-4/checkpoints/megatron_gpt_sft_aligned-averaged.nemo"
 TRT_PATH="${PROJECT_DIR}/trt_models/${MODEL_NAME}"
+touch ${TRT_PATH}/server_logs.txt
 LOGS_DIR="${HOME_DIR}/results/eval/logs"
 mkdir -p ${LOGS_DIR} ${TRT_PATH}
-NEMO_HF=1
-HF_TRT=1
+NEMO_HF=0
+HF_TRT=0
 RUN_EVAL=1
-
 # Conversion Params
 PP=1
 TP=8
@@ -67,9 +67,9 @@ if [ "$HF_TRT" -eq 1 ]; then
 fi
 
 # Evaluation Params
-DATA_FILES="" #("{$PROJECT_DIR}/datasets/glue_prompt/mnli/clean/validation_0.jsonl")
-DATA_DIR=""
-TASK='mnli' ## ??
+DATA_FILES=() #("{$PROJECT_DIR}/datasets/glue_prompt/mnli/clean/validation_0.jsonl") # DONT TOUCH
+DATA_DIR="/lustre/fs8/portfolios/llmservice/users/gnalbandyan/data/" # /benchmark/task/clean/_.jsonl
+SAVE_DIR="/lustre/fs8/portfolios/llmservice/users/gnalbandyan/preds/"
 TEMPERATURE=0  # Temperature of 0 means greedy decoding
 TOP_K=0
 TOP_P=0.95
@@ -78,7 +78,7 @@ TOKENS_TO_GENERATE=10
 REPETITION_PENALTY=1.0
 BATCH_SIZE=${MAX_BATCH_SIZE}
 MOUNTS="${NEMO_SKILLS_CODE}:/code,${MODEL_PATH}:/model"
-EVAL_ARGS=$(generate_args MOUNTS PROJECT_DIR DATA_DIR DATA_FILES MODEL_NAME TEMPERATURE TOP_K TOP_P RANDOM_SEED TOKENS_TO_GENERATE REPETITION_PENALTY BATCH_SIZE TRT_PATH NEMO_SKILLS_CODE PP TP LOGS_DIR )
+EVAL_ARGS=$(generate_args MOUNTS PROJECT_DIR SAVE_DIR DATA_DIR DATA_FILES MODEL_NAME TEMPERATURE TOP_K TOP_P RANDOM_SEED TOKENS_TO_GENERATE REPETITION_PENALTY BATCH_SIZE TRT_PATH NEMO_SKILLS_CODE PP TP LOGS_DIR )
 
 sbatch $eval_dependency \
     --account=${ACCOUNT} \
