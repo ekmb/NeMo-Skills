@@ -35,7 +35,7 @@ read -r -d '' up_eval <<EOF
        inference.tokens_to_generate=${TOKENS_TO_GENERATE} \
        inference.repetition_penalty=${REPETITION_PENALTY} \
     && echo "Killing server" \
-    && kill %1
+    && kill %1 \
     && rm /model/server_logs.txt;
 EOF
 
