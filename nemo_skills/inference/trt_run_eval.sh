@@ -11,15 +11,16 @@ function generate_args() {
 }
 
 # =============================== UPDATE =================================================
+MODEL_NAME=${1:-""} #"Mistral_7B_3turns_emb_noise_1e-4" # for summary csv
+echo "Running eval on ${MODEL_NAME}"
 ACCOUNT="llmservice_nemo_robustness"
-CONVERSION_TIMA="00:15:00"
-EVAL_TIME="00:30:00" 
+CONVERSION_TIME="00:15:00"
+EVAL_TIME="01:00:00" 
 PARTITION="batch_block1,batch_block3,batch_block4"
 NEMO_SKILLS_CODE="${HOME_DIR}/code/NeMo-Skills"
 
 HF_MODEL_NAME="mistralai/Mistral-7B-v0.1"  # Original model's HF name
-MODEL_NAME="Mistral_7B_3turns_emb_noise_1e-4" # for summary csv
-MODEL_PATH="/lustre/fsw/portfolios/llmservice/users/mnovikov/results/Mistral_7B_3turns_emb_noise_1e-4/checkpoints/megatron_gpt_sft_aligned-averaged.nemo"
+MODEL_PATH="/lustre/fsw/portfolios/llmservice/users/mnovikov/results/${MODEL_NAME}/checkpoints/megatron_gpt_sft_aligned-averaged.nemo"
 TRT_PATH="${PROJECT_DIR}/trt_models/${MODEL_NAME}"
 LOGS_DIR="${HOME_DIR}/results/eval/logs"
 mkdir -p ${LOGS_DIR} ${TRT_PATH} 
@@ -51,7 +52,7 @@ if [ "$NEMO_HF" -eq 1 ]; then
         )
     hf_trt_dependency="--dependency=afterok:$nemo_hf_id"
 fi
-
+echo "TIME: ${CONVERSION_TIME} and ${EVAL_TIME}"
 eval_dependency=""
 if [ "$HF_TRT" -eq 1 ]; then
     hf_trt_id=$(sbatch $hf_trt_dependency \
@@ -69,8 +70,8 @@ fi
 
 # Evaluation Params
 DATA_FILES=() #("{$PROJECT_DIR}/datasets/glue_prompt/mnli/clean/validation_0.jsonl") # DONT TOUCH
-DATA_DIR="/lustre/fsw/portfolios/llmservice/projects/llmservice_nemo_robustness/datasets/glue_prompt" # /benchmark/task/clean/_.jsonl
-SAVE_DIR="/lustre/fsw/portfolios/llmservice/users/ebakhturina/results/robustness_eval_v2"
+DATA_DIR="/lustre/fsw/portfolios/llmservice/projects/llmservice_nemo_robustness/datasets/benchmarks_v1" # /benchmark/task/clean/_.jsonl
+SAVE_DIR="/lustre/fsw/portfolios/llmservice/users/ebakhturina/results/robustness_eval_v3"
 TEMPERATURE=0  # Temperature of 0 means greedy decoding
 TOP_K=0
 TOP_P=0.95
