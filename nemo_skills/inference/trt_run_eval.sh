@@ -12,7 +12,7 @@ function generate_args() {
 
 # =============================== UPDATE =================================================
 ACCOUNT="llmservice_nemo_robustness"
-TIME="00:20:00" # should be enough for all
+TIME="00:30:00" # should be enough for all
 PARTITION="batch_block1,batch_block3,batch_block4"
 NEMO_SKILLS_CODE="${HOME_DIR}/code/NeMo-Skills"
 
@@ -20,18 +20,18 @@ HF_MODEL_NAME="mistralai/Mistral-7B-v0.1"  # Original model's HF name
 MODEL_NAME="Mistral_7B_3turns_emb_noise_1e-4" # for summary csv
 MODEL_PATH="/lustre/fsw/portfolios/llmservice/users/mnovikov/results/Mistral_7B_3turns_emb_noise_1e-4/checkpoints/megatron_gpt_sft_aligned-averaged.nemo"
 TRT_PATH="${PROJECT_DIR}/trt_models/${MODEL_NAME}"
-touch ${TRT_PATH}/server_logs.txt
 LOGS_DIR="${HOME_DIR}/results/eval/logs"
-mkdir -p ${LOGS_DIR} ${TRT_PATH}
-NEMO_HF=0
-HF_TRT=0
+mkdir -p ${LOGS_DIR} ${TRT_PATH} 
+touch ${TRT_PATH}/server_logs.txt
+NEMO_HF=1
+HF_TRT=1
 RUN_EVAL=1
 # Conversion Params
 PP=1
 TP=8
 MAX_INPUT_LEN=4096
 MAX_OUTPUT_LEN=128
-MAX_BATCH_SIZE=128
+MAX_BATCH_SIZE=512
 CONVERSION_ARGS=$(generate_args TRT_PATH MODEL_PATH PROJECT_DIR NEMO_SKILLS_CODE PP TP LOGS_DIR MAX_INPUT_LEN MAX_OUTPUT_LEN MAX_BATCH_SIZE HF_MODEL_NAME )
 
 # ========================================================================================
@@ -68,8 +68,8 @@ fi
 
 # Evaluation Params
 DATA_FILES=() #("{$PROJECT_DIR}/datasets/glue_prompt/mnli/clean/validation_0.jsonl") # DONT TOUCH
-DATA_DIR="/lustre/fs8/portfolios/llmservice/users/gnalbandyan/data/" # /benchmark/task/clean/_.jsonl
-SAVE_DIR="/lustre/fs8/portfolios/llmservice/users/gnalbandyan/preds/"
+DATA_DIR="/lustre/fsw/portfolios/llmservice/projects/llmservice_nemo_robustness/datasets/glue_prompt" # /benchmark/task/clean/_.jsonl
+SAVE_DIR="/lustre/fsw/portfolios/llmservice/users/ebakhturina/results/robustness_eval_v2"
 TEMPERATURE=0  # Temperature of 0 means greedy decoding
 TOP_K=0
 TOP_P=0.95
