@@ -12,22 +12,25 @@ function generate_args() {
 
 # =============================== UPDATE =================================================
 MODEL_NAME=${1:-""} #"Mistral_7B_3turns_emb_noise_1e-4" # for summary csv
+DATA_DIR=${2:-""} #"/lustre/fsw/portfolios/llmservice/projects/llmservice_nemo_robustness/datasets/benchmarks_v1" # /benchmark/task/clean/_.jsonl
+SAVE_DIR=${3:-""} #"/lustre/fsw/portfolios/llmservice/users/ebakhturina/results/robustness_eval_v3"
+NEMO_HF=${4:-1}
+HF_TRT=${5:-1}
+RUN_EVAL=${6:-1}
+
 echo "Running eval on ${MODEL_NAME}"
 ACCOUNT="llmservice_nemo_robustness"
-CONVERSION_TIME="00:15:00"
-EVAL_TIME="01:00:00" 
+CONVERSION_TIME="00:30:00"
+EVAL_TIME="00:30:00" 
 PARTITION="batch_block1,batch_block3,batch_block4"
 NEMO_SKILLS_CODE="${HOME_DIR}/code/NeMo-Skills"
 
 HF_MODEL_NAME="mistralai/Mistral-7B-v0.1"  # Original model's HF name
 MODEL_PATH="/lustre/fsw/portfolios/llmservice/users/mnovikov/results/${MODEL_NAME}/checkpoints/megatron_gpt_sft_aligned-averaged.nemo"
 TRT_PATH="${PROJECT_DIR}/trt_models/${MODEL_NAME}"
-LOGS_DIR="${HOME_DIR}/results/eval/logs"
+LOGS_DIR="${HOME_DIR}/results/eval_2/logs"
 mkdir -p ${LOGS_DIR} ${TRT_PATH} 
 touch ${TRT_PATH}/server_logs.txt
-NEMO_HF=1
-HF_TRT=1
-RUN_EVAL=1
 # Conversion Params
 PP=1
 TP=8
@@ -70,8 +73,6 @@ fi
 
 # Evaluation Params
 DATA_FILES=() #("{$PROJECT_DIR}/datasets/glue_prompt/mnli/clean/validation_0.jsonl") # DONT TOUCH
-DATA_DIR="/lustre/fsw/portfolios/llmservice/projects/llmservice_nemo_robustness/datasets/benchmarks_v1" # /benchmark/task/clean/_.jsonl
-SAVE_DIR="/lustre/fsw/portfolios/llmservice/users/ebakhturina/results/robustness_eval_v3"
 TEMPERATURE=0  # Temperature of 0 means greedy decoding
 TOP_K=0
 TOP_P=0.95
