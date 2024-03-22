@@ -13,10 +13,10 @@ MODELS=(
 )
 
 
-DATA_DIR="/lustre/fsw/portfolios/llmservice/projects/llmservice_nemo_robustness/datasets/benchmarks_v1/glue" 
-SAVE_DIR="/lustre/fsw/portfolios/llmservice/users/ebakhturina/results/robustness_eval_v3/glue"
-NEMO_HF=0
-HF_TRT=0
+DATA_DIR="/lustre/fsw/portfolios/llmservice/projects/llmservice_nemo_robustness/datasets/benchmarks_v1/" 
+SAVE_DIR="/lustre/fsw/portfolios/llmservice/users/${USER}/results/robustness_eval/benchmarks_v1"
+NEMO_HF=0 # set to 1 for new models
+HF_TRT=0 # set to 1 for new models
 RUN_EVAL=1
 
 for MODEL_NAME in "${MODELS[@]}"; do

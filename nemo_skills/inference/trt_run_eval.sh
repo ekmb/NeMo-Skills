@@ -21,7 +21,7 @@ RUN_EVAL=${6:-1}
 echo "Running eval on ${MODEL_NAME}"
 ACCOUNT="llmservice_nemo_robustness"
 CONVERSION_TIME="00:30:00"
-EVAL_TIME="00:30:00" 
+EVAL_TIME="01:00:00" 
 PARTITION="batch_block1,batch_block3,batch_block4"
 NEMO_SKILLS_CODE="${HOME_DIR}/code/NeMo-Skills"
 
