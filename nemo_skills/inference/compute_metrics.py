@@ -4,7 +4,7 @@ Modified version of https://gitlab-master.nvidia.com/fjia/llm_long_context_eval/
 Get summary.csv with score and null predictions amount.
 
 Running example:
-    python evaluate.py \
+    python compute_metrics.py \
         --data_dir <path_to_folder_with_jsonl_predictions> \
         --task_name <task_name> \
         --verbose <number_of_lines_to_display>
@@ -25,6 +25,7 @@ from collections import defaultdict
 import json
 from typing import List
 
+SEPARATORS = ["<extra_id_1>", "\n", " "]
 
 def accuracy_score(prediction, ground_truth):
     return prediction == ground_truth
@@ -106,17 +107,18 @@ def postprocess_pred(predict_str: str, task_name: str):
     predict_str = predict_str.strip()
 
     # Truncate prediction based on Instruction/Dialog template
-    predict_str = predict_str.split("<extra_id_1>")[0].strip()
-
-    while predict_str.startswith("`") or predict_str.startswith('"'):
-        predict_str = predict_str[1:]
-
-    while predict_str.endswith("`") or predict_str.endswith('"'):
-        predict_str = predict_str[:-1]
-
+    for separator in SEPARATORS:
+        if separator in predict_str:
+            predict_str = predict_str.split(separator)[0].strip()
+            
     predict_str = predict_str.lower()
 
     delimiters = [" ", ",", "."]
+    quotes = ["'", '"', "'", "`", "`"]
+    # if LABEL_TO_ID[task_name] doesn't contain any quotes, remove them from predict_str
+    if not any([quote in "".join(LABEL_TO_ID[task_name]) for quote in quotes]):
+        for quote in quotes:
+            predict_str = predict_str.replace(quote, "")
 
     # remove repeated labels while making sure only the label is repeated
     for label in LABEL_TO_ID[task_name]:
@@ -199,8 +201,9 @@ def write_evaluation(results: dict, pred_file: str):
     if os.path.isfile(output_file):
         results_csv = pd.read_csv(output_file)
         df = pd.concat([results_csv, df], axis=0)
-        df = df.drop_duplicates(subset=['Task', 'Score', 'Nulls', 'batch_size', 'temperature', 'top_k', 'top_p',
-                                    'tokens_to_generate', 'repetition_penalty', 'random_seed', 'model_name'])
+        if "temperature" in df.columns:
+            df = df.drop_duplicates(subset=['Task', 'Score', 'Nulls', 'batch_size', 'temperature', 'top_k', 'top_p',
+                                        'tokens_to_generate', 'greedy', 'template', 'model_name'])
     df.to_csv(output_file, index=False)
     print("\n=============================================\n")
     print(df)
