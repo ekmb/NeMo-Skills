@@ -17,11 +17,13 @@ SAVE_DIR=${3:-""} #"/lustre/fsw/portfolios/llmservice/users/ebakhturina/results/
 NEMO_HF=${4:-1}
 HF_TRT=${5:-1}
 RUN_EVAL=${6:-1}
+TEMPERATURE=${7:-0}  # Temperature of 0 means greedy decoding
+RANDOM_SEED=${8:-0}
 
 echo "Running eval on ${MODEL_NAME}"
 ACCOUNT="llmservice_nemo_robustness"
 CONVERSION_TIME="00:30:00"
-EVAL_TIME="01:00:00" 
+EVAL_TIME="01:25:00" 
 PARTITION="batch_block1,batch_block3,batch_block4"
 NEMO_SKILLS_CODE="${HOME_DIR}/code/NeMo-Skills"
 
@@ -73,10 +75,8 @@ fi
 
 # Evaluation Params
 DATA_FILES=() #("{$PROJECT_DIR}/datasets/glue_prompt/mnli/clean/validation_0.jsonl") # DONT TOUCH
-TEMPERATURE=0  # Temperature of 0 means greedy decoding
 TOP_K=0
 TOP_P=0.95
-RANDOM_SEED=0
 TOKENS_TO_GENERATE=10
 REPETITION_PENALTY=1.0
 BATCH_SIZE=${MAX_BATCH_SIZE}
