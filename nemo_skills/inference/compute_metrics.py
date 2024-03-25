@@ -114,7 +114,7 @@ def postprocess_pred(predict_str: str, task_name: str):
     predict_str = predict_str.lower()
 
     delimiters = [" ", ",", "."]
-    quotes = ["'", '"', "'", "`", "`"]
+    quotes = ["'", '"', "'", "`", "`", "."] 
     # if LABEL_TO_ID[task_name] doesn't contain any quotes, remove them from predict_str
     if not any([quote in "".join(LABEL_TO_ID[task_name]) for quote in quotes]):
         for quote in quotes:
@@ -201,9 +201,15 @@ def write_evaluation(results: dict, pred_file: str):
     if os.path.isfile(output_file):
         results_csv = pd.read_csv(output_file)
         df = pd.concat([results_csv, df], axis=0)
-        if "temperature" in df.columns:
-            df = df.drop_duplicates(subset=['Task', 'Score', 'Nulls', 'batch_size', 'temperature', 'top_k', 'top_p',
-                                        'tokens_to_generate', 'greedy', 'template', 'model_name'])
+        try:
+            # TODO @Grigor
+            if "temperature" in df.columns:
+                df = df.drop_duplicates(subset=['Task', 'Score', 'Nulls', 'batch_size', 'temperature', 'top_k', 'top_p',
+                                            'tokens_to_generate', 'greedy', 'template', 'model_name'])
+
+        except Exception as e:
+            print(f"Skipping deduplication. {e}")
+
     df.to_csv(output_file, index=False)
     print("\n=============================================\n")
     print(df)
