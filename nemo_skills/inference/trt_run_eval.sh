@@ -23,7 +23,7 @@ RANDOM_SEED=${8:-0}
 echo "Running eval on ${MODEL_NAME}"
 ACCOUNT="llmservice_nemo_robustness"
 CONVERSION_TIME="00:30:00"
-EVAL_TIME="01:25:00" 
+EVAL_TIME="01:25:00"
 PARTITION="batch_block1,batch_block3,batch_block4"
 NEMO_SKILLS_CODE="${HOME_DIR}/code/NeMo-Skills"
 
@@ -31,7 +31,7 @@ HF_MODEL_NAME="mistralai/Mistral-7B-v0.1"  # Original model's HF name
 MODEL_PATH="/lustre/fsw/portfolios/llmservice/users/mnovikov/results/${MODEL_NAME}/checkpoints/megatron_gpt_sft_aligned-averaged.nemo"
 TRT_PATH="${PROJECT_DIR}/trt_models/${MODEL_NAME}"
 LOGS_DIR="${HOME_DIR}/results/eval_2/logs"
-mkdir -p ${LOGS_DIR} ${TRT_PATH} 
+mkdir -p ${LOGS_DIR} ${TRT_PATH}
 touch ${TRT_PATH}/server_logs.txt
 # Conversion Params
 PP=1
@@ -83,14 +83,15 @@ BATCH_SIZE=${MAX_BATCH_SIZE}
 MOUNTS="${NEMO_SKILLS_CODE}:/code,${MODEL_PATH}:/model"
 EVAL_ARGS=$(generate_args MOUNTS PROJECT_DIR SAVE_DIR DATA_DIR DATA_FILES MODEL_NAME TEMPERATURE TOP_K TOP_P RANDOM_SEED TOKENS_TO_GENERATE REPETITION_PENALTY BATCH_SIZE TRT_PATH NEMO_SKILLS_CODE PP TP LOGS_DIR )
 
-sbatch $eval_dependency \
-    --account=${ACCOUNT} \
-    --export=${EVAL_ARGS} \
-    --time=${EVAL_TIME} \
-    --job-name=${ACCOUNT}-eval \
-    -o=${LOGS_DIR}/out.log \
-    --gres=gpu:${TP} \
-    --nodes=${PP} \
-    --partition=${PARTITION} \
-    "03_run_eval.sh"
-
+if [ "$RUN_EVAL" -eq 1 ]; then
+    sbatch $eval_dependency \
+        --account=${ACCOUNT} \
+        --export=${EVAL_ARGS} \
+        --time=${EVAL_TIME} \
+        --job-name=${ACCOUNT}-eval \
+        -o=${LOGS_DIR}/out.log \
+        --gres=gpu:${TP} \
+        --nodes=${PP} \
+        --partition=${PARTITION} \
+        "03_run_eval.sh"
+fi

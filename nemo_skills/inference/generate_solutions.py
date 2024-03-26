@@ -15,7 +15,9 @@
 import os
 from tqdm import tqdm
 import pandas as pd
+import numpy as np
 import glob
+import uuid
 import json
 import logging
 import sys
@@ -31,7 +33,7 @@ from nemo_skills.code_execution.sandbox import get_sandbox, sandbox_params
 from nemo_skills.inference.prompt.utils import Prompt, PromptConfig, datasets, prompt_types
 from nemo_skills.inference.server.model import ErrorRecoveryConfig, get_model, server_params
 from nemo_skills.utils import get_fields_docstring, get_help_message, setup_logging
-from nemo_skills.inference.compute_metrics import compute_metrics
+# from nemo_skills.inference.compute_metrics import compute_metrics
 
 LOG = logging.getLogger(__file__)
 
@@ -90,53 +92,6 @@ cs.store(name="base_generation_config", node=GenerateSolutionsConfig)
 
 SEPARATORS = ["<extra_id_1>", "\n"]
 
-# source: https://github.com/microsoft/promptbench/blob/main/promptbench/config.py
-LABEL_TO_ID = {
-    "mmlu": ["A", "B", "C", "D"],
-    "sst2": ["negative", "positive"],
-    "mnli": ["entailment", "neutral", "contradiction"],
-    "mnli_mismatched": ["entailment", "neutral", "contradiction"],
-    "mnli_matched": ["entailment", "neutral", "contradiction"],
-    "qqp": ["equivalent", "not_equivalent"],
-    "qnli": ["entailment", "not_entailment"],
-    "rte": ["entailment", "not_entailment"],
-    "cola": ["unacceptable", "acceptable"],
-    "mrpc": ["equivalent", "not_equivalent"],
-    "wnli": ["entailment", "not_entailment"],
-    "retrieve_kv": ["negative", "positive"],
-    "boolq": ["true", "false"],
-}
-
-def postprocess_pred(predict_str: str, task_name: str):
-    predict_str = predict_str.strip()
-
-    # Truncate prediction based on Instruction/Dialog template
-    for separator in SEPARATORS:
-        if separator in predict_str:
-            predict_str = predict_str.split(separator)[0].strip()
-
-    predict_str = predict_str.lower()
-
-    delimiters = [" ", ",", "."]
-    quotes = ["'", '"', "'", "`", "`"]
-    # if LABEL_TO_ID[task_name] doesn't contain any quotes, remove them from predict_str
-    if not any([quote in "".join(LABEL_TO_ID[task_name]) for quote in quotes]):
-        for quote in quotes:
-            predict_str = predict_str.replace(quote, "")
-
-    # remove repeated labels while making sure only the label is repeated
-    for label in LABEL_TO_ID[task_name]:
-        label_count = predict_str.count(label)
-        if label_count > 1:
-            for delimiter in delimiters:
-                if delimiter in predict_str:
-                    repeated_label = delimiter.join([label] * label_count)
-                    if repeated_label == predict_str:
-                        predict_str = predict_str.split(delimiter)[0]
-                        break
-
-    return predict_str
-
 
 def add_version_to_file(file_name):
     file_folder = os.path.dirname(file_name)
@@ -144,25 +99,21 @@ def add_version_to_file(file_name):
     pred_files = os.listdir(file_folder)
     pred_files = [f for f in pred_files if f.endswith("_preds.jsonl")]
     pred_files = [f for f in pred_files if base_name in f]
-    version = [int(f.split('_preds.jsonl')[0].split('__v')[-1]) for f in pred_files if '__v' in f]
-    if len(version) > 0:
-        version = max(version) + 1
-    else:
-        version = 0
+    # version = [int(f.split('_preds.jsonl')[0].split('__v')[-1]) for f in pred_files if '__v' in f]
+    # if len(version) > 0:
+    #     version = max(version) + 1
+    # else:
+    #     version = 0
+    version = np.random.randint(1, 1000000)
+    # version = str(uuid.uuid4()).replace('-', '')
+    file_name_tmp = file_name.replace(".jsonl", f"__v{version}_preds.jsonl")
 
-    file_name = file_name.replace(".jsonl", f"__v{version}_preds.jsonl")
+    while os.path.isfile(file_name_tmp):
+        version = np.random.randint(1, 10000000)
+        file_name_tmp = file_name.replace(".jsonl", f"__v{version}_preds.jsonl")
+    file_name = file_name_tmp
+
     return file_name
-
-
-def collect_results(save_dir):
-    summary_csvs = glob.glob(f"{save_dir}/**/summary*.csv", recursive=True)
-    results = []
-    for summary_file in summary_csvs:
-        df = pd.read_csv(summary_file)
-        results.append(df)
-    df = pd.concat(results)
-    df.to_csv(os.path.join(save_dir, "all_summary.csv"), index=False)
-    print(f"Saved results to {os.path.join(save_dir, 'all_summary.csv')}")
 
 
 @hydra.main(version_base=None, config_name='generation_config', config_path='.')
@@ -181,24 +132,27 @@ def generate_solutions(cfg: GenerateSolutionsConfig):
     else:
         raise ValueError('Either data_dir or data_files should be specified')
 
+    print(data_files)
+
     for data_file_path in data_files:
+        print('Doing', data_file_path)
         task = os.path.basename(os.path.dirname(os.path.dirname(data_file_path)))
         data_file = list(open(data_file_path))
         data_file = [json.loads(line) for line in data_file]
+        print('Len of', data_file_path, len(data_file))
         batch = []
         for i in tqdm(range(0, len(data_file), cfg.batch_size)):
             batch = data_file[i:min(i+cfg.batch_size, len(data_file))]
             prompts = [i['input'] for i in batch]
             outputs = llm(stop_phrases=SEPARATORS, prompts=prompts, **asdict(cfg.inference))
             for k, o_k in enumerate(outputs):
-                data_file[i+k]['pred'] = postprocess_pred(o_k, task)
-
+                data_file[i+k]['pred'] = o_k
+        print('Preds done', len(data_file))
         if cfg.save_dir:
+            save_dir = cfg.save_dir + '/'
             if cfg.data_dir:
                 # prediction will be saved in a folder with original folder structure
                 save_dir = os.path.dirname(data_file_path.replace(cfg.data_dir, cfg.save_dir, 1))
-            else:
-                save_dir = cfg.save_dir
         else:
             save_dir = os.path.join(os.path.dirname(data_file_path), 'preds')
         # make a folder with the name of the data file in save dir to keep predictions
@@ -207,13 +161,16 @@ def generate_solutions(cfg: GenerateSolutionsConfig):
         os.makedirs(pred_folder, exist_ok=True)
         pred_save_file = os.path.join(pred_folder, os.path.basename(data_file_path))
         pred_save_file = add_version_to_file(pred_save_file)
+        eval_metadata = {'Task': task, 'batch_size': cfg.batch_size, 'model_name': cfg.model_name, **asdict(cfg.inference)}
+        print('Saving Manifest to', pred_save_file)
         with open(pred_save_file, "w") as f_out:
-            for i in data_file:
-                f_out.write(json.dumps(i) + "\n")
-        prefix = os.path.basename(pred_save_file).replace(".jsonl", "")
-        eval_matadata = {'Task': task, 'batch_size': cfg.batch_size, 'model_name': cfg.model_name, **asdict(cfg.inference)}
-        compute_metrics(os.path.dirname(pred_save_file), task, prefix, 0, eval_metadata=eval_matadata)
-        collect_results(save_dir)
+            for i, data in enumerate(data_file):
+                if i == 0:
+                    data['eval_metadata'] = eval_metadata
+                f_out.write(json.dumps(data) + "\n")
+        # prefix = os.path.basename(pred_save_file).replace(".jsonl", "")
+        # compute_metrics(os.path.dirname(pred_save_file), task, prefix, 0, eval_metadata=eval_matadata)
+        # collect_results(save_dir)
 
 
 error_recovery_params = '\n' + get_fields_docstring(

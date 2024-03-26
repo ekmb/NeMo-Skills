@@ -18,6 +18,7 @@ data_dir should have the following structure:
 
 import re
 import os
+import glob
 import argparse
 import pandas as pd
 from pathlib import Path
@@ -85,22 +86,33 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--data_dir", type=str, required=True, help="Path to the prediction jsonl files"
 )
-parser.add_argument(
-    "--task_name",
-    type=str,
-    default="retrieve_kv",
-    choices=TASK_TO_METRICS.keys(),
-    help="Task name. This is used to look up correct metric",
-)
-parser.add_argument(
-    "--prefix",
-    type=str,
-    default="",
-    help="Prefix of prediction field (usually derived from the input file)",
-)
+# parser.add_argument(
+#     "--task_name",
+#     type=str,
+#     default="retrieve_kv",
+#     choices=TASK_TO_METRICS.keys(),
+#     help="Task name. This is used to look up correct metric",
+# )
+# parser.add_argument(
+#     "--prefix",
+#     type=str,
+#     default="",
+#     help="Prefix of prediction field (usually derived from the input file)",
+# )
 parser.add_argument(
     "--verbose", type=int, default=0, help="Number of lines to display."
 )
+
+
+def collect_results(save_dir):
+    summary_csvs = glob.glob(f"{save_dir}/**/summary*.csv", recursive=True)
+    results = []
+    for summary_file in summary_csvs:
+        df = pd.read_csv(summary_file)
+        results.append(df)
+    df = pd.concat(results)
+    df.to_csv(os.path.join(save_dir, "all_summary.csv"), index=False)
+    # print(f"Saved results to {os.path.join(save_dir, 'all_summary.csv')}")
 
 
 def postprocess_pred(predict_str: str, task_name: str):
@@ -110,11 +122,11 @@ def postprocess_pred(predict_str: str, task_name: str):
     for separator in SEPARATORS:
         if separator in predict_str:
             predict_str = predict_str.split(separator)[0].strip()
-            
+
     predict_str = predict_str.lower()
 
     delimiters = [" ", ",", "."]
-    quotes = ["'", '"', "'", "`", "`", "."] 
+    quotes = ["'", '"', "'", "`", "`", "."]
     # if LABEL_TO_ID[task_name] doesn't contain any quotes, remove them from predict_str
     if not any([quote in "".join(LABEL_TO_ID[task_name]) for quote in quotes]):
         for quote in quotes:
@@ -157,11 +169,13 @@ def get_pred_and_ref(
         inputs.append(input)
         predicts.append(predict)
         references.append(reference)
-    return inputs, predicts, references
+
+    eval_metadata = lines[0].get('eval_metadata', {})
+    return inputs, predicts, references, eval_metadata
 
 
 def run_evaluation_per_task(predictions_file: str, task_name: str, verbose: int = 0):
-    inputs, predicts, references = get_pred_and_ref(predictions_file=predictions_file,
+    inputs, predicts, references, eval_metadata = get_pred_and_ref(predictions_file=predictions_file,
                                                     task_name=task_name)
 
     task_nulls = f"{sum([len(x)==0 for x in predicts])}/{len(predicts)}"
@@ -184,7 +198,7 @@ def run_evaluation_per_task(predictions_file: str, task_name: str, verbose: int 
             if i > verbose:
                 break
 
-    return task_score, task_nulls
+    return task_score, task_nulls, eval_metadata
 
 
 def write_evaluation(results: dict, pred_file: str):
@@ -202,18 +216,18 @@ def write_evaluation(results: dict, pred_file: str):
         results_csv = pd.read_csv(output_file)
         df = pd.concat([results_csv, df], axis=0)
         try:
-            # TODO @Grigor
             if "temperature" in df.columns:
                 df = df.drop_duplicates(subset=['Task', 'Score', 'Nulls', 'batch_size', 'temperature', 'top_k', 'top_p',
-                                            'tokens_to_generate', 'greedy', 'template', 'model_name'])
+                                                'tokens_to_generate', 'repetition_penalty', 'random_seed', 'model_name'],
+                                                keep='last')
 
         except Exception as e:
             print(f"Skipping deduplication. {e}")
 
     df.to_csv(output_file, index=False)
-    print("\n=============================================\n")
-    print(df)
-    print(f"\nSaved results to {output_file}")
+    # print("\n=============================================\n")
+    # print(df)
+    print(f"Saved results to {output_file}")
 
 
 def aggregate_chunk(folder):
@@ -237,38 +251,42 @@ def aggregate_chunk(folder):
                 f.write(json.dumps(line) + "\n")
 
 
-def compute_metrics(data_dir: str, task_name: str = "retrieve_kv", prefix: str = "",
-                    verbose: int = 0, eval_metadata: dict = {}):
+def compute_metrics(data_dir: str, verbose: int = 0,
+                    #task_name: str = "retrieve_kv", prefix: str = "", eval_metadata: dict = {}
+                    ):
     if not os.path.exists(data_dir):
         raise ValueError(f"Prediction folder {data_dir} not found.")
 
     # Aggregate all prediction files
-    aggregate_chunk(data_dir)
+    # aggregate_chunk(data_dir)
 
     # Get scores and nulls
-    pred_file = os.path.join(data_dir, f"{prefix}.jsonl")
+    # pred_file = os.path.join(data_dir, f"{prefix}.jsonl")
+    file_paths = glob.glob(f'{data_dir}/**/*jsonl', recursive=True)
+    for pred_file in file_paths:
+        task_name = Path(pred_file).parent.parent.parent.name
+        if not os.path.exists(pred_file):
+            raise ValueError(f"Prediction file {pred_file} not found.")
 
-    if not os.path.exists(pred_file):
-        raise ValueError(f"Prediction file {pred_file} not found.")
+        # check if pred_file is empty
+        if os.stat(pred_file).st_size == 0:
+            raise ValueError(f"Prediction file {pred_file} is empty.")
 
-    # check if pred_file is empty
-    if os.stat(pred_file).st_size == 0:
-        raise ValueError(f"Prediction file {pred_file} is empty.")
+        task_score, task_nulls, eval_metadata = run_evaluation_per_task(
+            predictions_file=pred_file, task_name=task_name, verbose=verbose
+        )
 
-    task_score, task_nulls = run_evaluation_per_task(
-        predictions_file=pred_file, task_name=task_name, verbose=verbose
-    )
-
-    for key in ['port', 'host', 'init_timeout', 'model_TRT', 'prompt', 'task']:
-        if key in eval_metadata:
-            eval_metadata.pop(key)
-    eval_metadata['pred_file'] = pred_file
-    eval_metadata['date'] = pd.to_datetime('today').strftime('%Y-%m-%d')
-    results = {'Task': task_name, 'Score': task_score, 'Nulls': task_nulls, **eval_metadata}
-    # Write to csv
-    write_evaluation(results, pred_file)
+        for key in ['port', 'host', 'init_timeout', 'model_TRT', 'prompt', 'task']:
+            if key in eval_metadata:
+                eval_metadata.pop(key)
+        eval_metadata['pred_file'] = pred_file
+        eval_metadata['date'] = pd.to_datetime('today').strftime('%Y-%m-%d')
+        results = {'Task': task_name, 'Score': task_score, 'Nulls': task_nulls, **eval_metadata}
+        # Write to csv
+        write_evaluation(results, pred_file)
 
 
 if __name__ == "__main__":
     args = parser.parse_args()
-    compute_metrics(args.data_dir, args.task_name, args.prefix, args.verbose)
+    compute_metrics(args.data_dir, args.verbose)
+    # collect_results(args.data_dir)
