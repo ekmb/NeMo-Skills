@@ -19,18 +19,27 @@ HF_TRT=${5:-1}
 RUN_EVAL=${6:-1}
 TEMPERATURE=${7:-0}  # Temperature of 0 means greedy decoding
 RANDOM_SEED=${8:-0}
+TRT_PATH=${9:-""}
 
+if [ -z "$TRT_PATH" ]; then
+    TRT_PATH="${PROJECT_DIR}/trt_models/${MODEL_NAME}"
+fi
+
+echo "TRT_PATH: ${TRT_PATH}"
 echo "Running eval on ${MODEL_NAME}"
 ACCOUNT="llmservice_nemo_robustness"
 CONVERSION_TIME="00:30:00"
-EVAL_TIME="01:25:00"
+EVAL_TIME="00:30:00"
 PARTITION="batch_block1,batch_block3,batch_block4"
 NEMO_SKILLS_CODE="${HOME_DIR}/code/NeMo-Skills"
 
 HF_MODEL_NAME="mistralai/Mistral-7B-v0.1"  # Original model's HF name
+# HF_MODEL_NAME="meta-llama/Llama-2-70b-chat-hf"  # Original model's HF name
+# HF_MODEL_NAME="mistralai/Mistral-7B-Instruct-v0.2"  # Original model's HF name
+
 MODEL_PATH="/lustre/fsw/portfolios/llmservice/users/mnovikov/results/${MODEL_NAME}/checkpoints/megatron_gpt_sft_aligned-averaged.nemo"
-TRT_PATH="${PROJECT_DIR}/trt_models/${MODEL_NAME}"
-LOGS_DIR="${HOME_DIR}/results/eval_2/logs"
+# TRT_PATH="/lustre/fs8/portfolios/llmservice/users/gnalbandyan/checkpoints/${MODEL_NAME}"
+LOGS_DIR="${HOME_DIR}/results/logs"
 mkdir -p ${LOGS_DIR} ${TRT_PATH}
 touch ${TRT_PATH}/server_logs.txt
 # Conversion Params
