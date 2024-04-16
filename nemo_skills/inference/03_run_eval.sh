@@ -25,6 +25,7 @@ read -r -d '' up_eval <<EOF
        data_dir="\${DATA_DIR}" \
        save_dir="\${SAVE_DIR}" \
        server.host=127.0.0.1 \
+       server.handle_code_execution=False \
        model_name=${MODEL_NAME} \
        batch_size=${BATCH_SIZE} \
        task=${TASK} \

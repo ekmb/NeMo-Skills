@@ -17,7 +17,6 @@ from tqdm import tqdm
 import pandas as pd
 import numpy as np
 import glob
-import uuid
 import json
 import logging
 import sys
@@ -46,6 +45,8 @@ class InferenceConfig:
     random_seed: int = 0
     tokens_to_generate: int = 512
     repetition_penalty: float = 1.0
+    add_special_tokens: bool = False
+    process_prediction: bool = True
 
 
 @dataclass
@@ -105,7 +106,6 @@ def add_version_to_file(file_name):
     # else:
     #     version = 0
     version = np.random.randint(1, 1000000)
-    # version = str(uuid.uuid4()).replace('-', '')
     file_name_tmp = file_name.replace(".jsonl", f"__v{version}_preds.jsonl")
 
     while os.path.isfile(file_name_tmp):
@@ -132,14 +132,11 @@ def generate_solutions(cfg: GenerateSolutionsConfig):
     else:
         raise ValueError('Either data_dir or data_files should be specified')
 
-    print(data_files)
-
     for data_file_path in data_files:
         print('Doing', data_file_path)
         task = os.path.basename(os.path.dirname(os.path.dirname(data_file_path)))
         data_file = list(open(data_file_path))
         data_file = [json.loads(line) for line in data_file]
-        print('Len of', data_file_path, len(data_file))
         batch = []
         for i in tqdm(range(0, len(data_file), cfg.batch_size)):
             batch = data_file[i:min(i+cfg.batch_size, len(data_file))]
@@ -147,7 +144,6 @@ def generate_solutions(cfg: GenerateSolutionsConfig):
             outputs = llm(stop_phrases=SEPARATORS, prompts=prompts, **asdict(cfg.inference))
             for k, o_k in enumerate(outputs):
                 data_file[i+k]['pred'] = o_k
-        print('Preds done', len(data_file))
         if cfg.save_dir:
             save_dir = cfg.save_dir + '/'
             if cfg.data_dir:

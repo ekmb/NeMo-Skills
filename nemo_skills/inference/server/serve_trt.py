@@ -91,11 +91,11 @@ class TritonServerGenerate(Resource):
         return jsonify(out)
 
 
-def parse_input(input_texts: str, tokenizer):
+def parse_input(input_texts: str, tokenizer, add_special_tokens=False):
     batch_input_ids = [
         tokenizer.encode(
             input_text,
-            add_special_tokens=False,
+            add_special_tokens=add_special_tokens,
         )
         for input_text in input_texts
     ]
@@ -207,8 +207,10 @@ class TensorRTLLM:
         repetition_penalty,
         random_seed,
         stop_words_list,
+        add_special_tokens=False,
     ):
-        batch_input_ids, input_lengths = parse_input(input_texts, self.tokenizer)
+        print('add_special_tokens', add_special_tokens)
+        batch_input_ids, input_lengths = parse_input(input_texts, self.tokenizer, add_special_tokens=add_special_tokens)
 
         stop_words_list = [stop_words_list for _ in range(len(input_texts))]
         stop_words_list = prepare_stop_words(stop_words_list, self.tokenizer)
